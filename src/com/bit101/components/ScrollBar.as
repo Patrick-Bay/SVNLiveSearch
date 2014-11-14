@@ -317,7 +317,7 @@ package com.bit101.components
 			stage.addEventListener(MouseEvent.MOUSE_UP, onMouseGoUp);
 		}
 		
-		protected function goDown():void
+		public function goDown():void
 		{
 			_scrollSlider.value += _lineSize;
 			dispatchEvent(new Event(Event.CHANGE));

@@ -18,5 +18,5 @@
 	More options:
 	http://livedocs.adobe.com/flex/3/html/File_formats_1.html#1043413
 	-->
-  <supportedProfiles>extendedDesktop</supportedProfiles>
+  <supportedProfiles>extendedDesktop desktop</supportedProfiles>
 </application>

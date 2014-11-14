@@ -4,8 +4,9 @@ package  {
 	import flash.display.Sprite;
 	import flash.events.Event;
 	import flash.events.MouseEvent;
-	import flash.text.TextField;
+	import flash.text.TextField;	
 	import flash.text.TextFormat;
+	import flash.text.TextFieldAutoSize;
 	import flash.filesystem.File;
 	import flash.filesystem.FileStream;
 	import flash.filesystem.FileMode;
@@ -23,23 +24,27 @@ package  {
 		    <launchcmd>
 		        @ECHO OFF
 				@CLS
-				%path%;
-				svn.exe ls -R %repoURL%
+		        PATH %exepath%;
+				%exepath%\svn.exe ls -R %repoURL%
 			</launchcmd>
 			<views>
 				<main>
 					<TextField x="5" y="10">Repository URL:</TextField>
-		<InputText instance="repoURL" x="90" y="10" width="550">http://</InputText >
+					<InputText instance="repoURL" x="90" y="10" width="550">http://</InputText >
 					<TextField x="5" y="30">Search file name:</TextField>
 					<InputText instance="fileName" x="90" y="30" width="550"></InputText>
-					<PushButton instance="searchButton" x="90" y="60" width="550">SEARCH</PushButton>
-					<TextField instance="currentSearchName" x="90" y="80" width="550">CURRENT</TextField>
-					<TextArea instance="results" x="50" y="110" width="600" height="500"></TextArea>
+					<CheckBox instance="caseSensitiveToggle" x="90" y="50" width="550">Case Sensitive</CheckBox>
+					<PushButton instance="searchButton" x="90" y="70" width="550">SEARCH</PushButton>					
+					<TextArea instance="results" x="10" y="110" width="680" height="500">...Search Results...</TextArea>
+					<TextArea instance="searchProgressHistory" x="10" y="650" width="680" height="130">...Search Progress...</TextArea>					
 				</main>
 			</views>
 		</config>
 		
 		private var _searchProc:NativeProcess;
+		private var _outputBuffer:String = null;
+		private var _searchProgressHistoryLength:uint = 0;
+		public var maxSearchProgressHistLength:uint = 10000;
 		
 		public function Main():void {
 			this.addEventListener(Event.ADDED_TO_STAGE, this.setDefaults);
@@ -47,21 +52,58 @@ package  {
 		
 		private function onSearchProgress(eventObj:ProgressEvent):void {			
 			var newLine:String = _searchProc.standardOutput.readMultiByte(_searchProc.standardOutput.bytesAvailable, "iso-8895-1");
-			newLine = newLine.split(String.fromCharCode(10)).join("");						
 			this.analyzeSearchOutput(newLine);
 			
 		}
 		
+		private function scrollLoop(eventObj:Event):void {
+			try {
+				this.searchProgressHistory.scrollbar.goDown();
+				this.searchProgressHistory.scrollbar.goDown();				
+			} catch (err:*) {			
+			}
+		}
+		
 		private function analyzeSearchOutput(outText:String):void {
+			if (_outputBuffer != null) {
+				outText = _outputBuffer + outText;
+				_outputBuffer = "";
+			}//if
+			if (this._searchProgressHistoryLength > maxSearchProgressHistLength) {
+				this.searchProgressHistory.text = "";
+				_searchProgressHistoryLength = 0;
+			}
 			var lines:Array = outText.split(String.fromCharCode(13));
 			var searchFileName:String = this.fileName.text;
-			for (var count:int = 0; count < lines.length; count++) {
+			for (var count:int = 0; count < (lines.length-1); count++) {
 				var currentLine:String = lines[count] as String;
-				this.currentSearchName.text = currentLine;			
-				if (currentLine.indexOf(searchFileName) > -1) {
+				currentLine = currentLine.split(String.fromCharCode(10)).join("");
+				currentLine = currentLine.split(String.fromCharCode(13)).join("");
+				this.searchProgressHistory.text += currentLine+String.fromCharCode(13);
+				this._searchProgressHistoryLength++;
+				if (this.searchMatch(searchFileName, currentLine)) {
 					this.results.text += currentLine+String.fromCharCode(13);
-				}
+				}//if				
+			}//for
+			if (lines[lines.length-1].indexOf(String.fromCharCode(13)) < 0) {
+				currentLine = lines[lines.length - 1];
+				currentLine = currentLine.split(String.fromCharCode(10)).join("");
+				currentLine = currentLine.split(String.fromCharCode(13)).join("");
+				_outputBuffer = currentLine;
+			}//if
+		}
+		
+		private function searchMatch(searchPattern:String, compareString:String):Boolean {
+			var localCompareStr:String = new String(compareString);
+			var localSearchStr:String = new String(searchPattern);
+			if (!this.caseSensitiveSearch) {
+				localCompareStr = localCompareStr.toLowerCase();
+				localSearchStr = localSearchStr.toLowerCase();
 			}
+			if (localCompareStr.indexOf(localSearchStr) > -1) {
+				return (true);
+			}//if
+			return (false);
 		}
 		
 		private function onSearchClick(eventObj:MouseEvent):void {
@@ -70,9 +112,7 @@ package  {
 			var tmpDir:File = File.createTempDirectory();
 			var cmdFile:File = tmpDir.resolvePath("svnls.cmd");			
 			var executable:File = File.applicationDirectory.resolvePath("./bin_x86/svn.exe");
-			launchCMDContents = launchCMDContents.split("%path%").join("PATH "+File.applicationDirectory.nativePath + "\\bin_x86");
-			trace (launchCMDContents);
-			//launchCMDContents = launchCMDContents.split("%svn.exe%").join(File.applicationDirectory.nativePath+"/bin_x86");
+			launchCMDContents = launchCMDContents.split("%exepath%").join(File.applicationDirectory.nativePath + "\\bin_x86");
 			//Create CMD file (safer with non-standard parameters than launching process directly)
 			var fs:FileStream = new FileStream();
 			fs.open(cmdFile, FileMode.WRITE);
@@ -85,8 +125,19 @@ package  {
 			_searchProc = new NativeProcess();
 			_searchProc.addEventListener(ProgressEvent.STANDARD_OUTPUT_DATA, this.onSearchProgress);
 			this.results.text = "";
+			this.searchProgressHistory.text = "";
+			this.addEventListener(Event.ENTER_FRAME, this.scrollLoop);
 			_searchProc.start(npInfo);
 			trace ("Started search...");
+		}
+		
+		public function get caseSensitiveSearch():Boolean {
+			try {
+				return (this.caseSensitiveToggle.selected);
+			} catch (err:*) {
+				return (false);
+			}
+			return (false);
 		}
 		
 		private function buildView(viewName:String):void {
@@ -98,6 +149,8 @@ package  {
 				this.generateComponent(currentViewItem);
 			}
 			this.searchButton.addEventListener(MouseEvent.CLICK, this.onSearchClick);
+			this.results.editable = false;
+			this.searchProgressHistory.editable = false;
 		}
 		
 		private function generateComponent(componentDef:XML):void {			
@@ -126,6 +179,7 @@ package  {
 					tfComp.type = "dynamic";
 					format.size = 8;
 					format.font = "PF Ronda Seven";
+					tfComp.autoSize = TextFieldAutoSize.LEFT;
 					tfComp.defaultTextFormat = format;
 					tfComp.x = xPos;
 					tfComp.y = yPos;
@@ -140,17 +194,17 @@ package  {
 					break;				
 				case "InputText":
 					try {
-						var xPos:Number = Number(componentDef.@x);
+						xPos = Number(componentDef.@x);
 					} catch (err:*) {
 						xPos = 0;
 					}
 					try {
-						var yPos:Number = Number(componentDef.@y);
+						yPos = Number(componentDef.@y);
 					} catch (err:*) {
 						yPos = 0;
 					}
 					try {
-						var initText:String = componentDef.children().toString();
+						initText = componentDef.children().toString();
 					} catch (err:*) {
 						initText = "";
 					}
@@ -170,7 +224,7 @@ package  {
 					} catch (err:*) {						
 					}
 					try {
-						var nameVal:String = String(componentDef.@instance);
+						nameVal = String(componentDef.@instance);
 						itComp.name = nameVal;
 						this[nameVal] = itComp;
 					} catch (err:*) {						
@@ -178,37 +232,37 @@ package  {
 					break;
 				case "TextArea":
 					try {
-						var xPos:Number = Number(componentDef.@x);
+						xPos = Number(componentDef.@x);
 					} catch (err:*) {
 						xPos = 0;
 					}
 					try {
-						var yPos:Number = Number(componentDef.@y);
+						yPos = Number(componentDef.@y);
 					} catch (err:*) {
 						yPos = 0;
 					}
 					try {
-						var initText:String = componentDef.children().toString();
+						initText = componentDef.children().toString();
 					} catch (err:*) {
 						initText = "";
 					}
 					var taComp:TextArea = new TextArea(this, xPos, yPos, initText);
 					try {
-						var widthVal:Number = Number(componentDef.@width);
+						widthVal = Number(componentDef.@width);
 						if (widthVal>0) {
 							taComp.width = widthVal;
 						}
 					} catch (err:*) {						
 					}
 					try {
-						var heightVal:Number = Number(componentDef.@height);
+						heightVal = Number(componentDef.@height);
 						if (heightVal>0) {
 							taComp.height = heightVal;
 						}
 					} catch (err:*) {						
 					}
 					try {
-						var nameVal:String = String(componentDef.@instance);
+						nameVal = String(componentDef.@instance);
 						taComp.name = nameVal;
 						this[nameVal] = taComp;
 					} catch (err:*) {						
@@ -216,40 +270,90 @@ package  {
 					break;
 				case "PushButton":
 					try {
-						var xPos:Number = Number(componentDef.@x);
+						xPos = Number(componentDef.@x);
 					} catch (err:*) {
 						xPos = 0;
 					}
 					try {
-						var yPos:Number = Number(componentDef.@y);
+						yPos = Number(componentDef.@y);
 					} catch (err:*) {
 						yPos = 0;
 					}
 					try {
-						var initText:String = componentDef.children().toString();
+						initText = componentDef.children().toString();
 					} catch (err:*) {
 						initText = "";
 					}
 					var butComp:PushButton = new PushButton(this, xPos, yPos, initText);
 					try {
-						var widthVal:Number = Number(componentDef.@width);
+						widthVal = Number(componentDef.@width);
 						if (widthVal>0) {
 							butComp.width = widthVal;
 						}
 					} catch (err:*) {						
 					}
 					try {
-						var heightVal:Number = Number(componentDef.@height);
+						heightVal = Number(componentDef.@height);
 						if (heightVal>0) {
 							butComp.height = heightVal;
 						}
 					} catch (err:*) {						
 					}
 					try {
-						var nameVal:String = String(componentDef.@instance);
-						butComp.name = nameVal;
-						trace ("Naming button: " + nameVal);
+						nameVal = String(componentDef.@instance);
+						butComp.name = nameVal;						
 						this[nameVal] = butComp;
+					} catch (err:*) {						
+					}
+					break;
+				case "CheckBox":
+					try {
+						xPos = Number(componentDef.@x);
+					} catch (err:*) {
+						xPos = 0;
+					}
+					try {
+						yPos = Number(componentDef.@y);
+					} catch (err:*) {
+						yPos = 0;
+					}
+					var checked:Boolean = false;
+					try {
+						var checkedStr:String = String(componentDef.@checked);
+						if (checkedStr.toLowerCase() == "true") {
+							checked = true;
+						}//if
+					} catch (err:*) {						
+					}
+					try {
+						initText = componentDef.children().toString();
+					} catch (err:*) {
+						initText = "";
+					}
+					var cbComp:CheckBox = new CheckBox(this, xPos, yPos, initText);
+					if (checked) {
+						cbComp.selected = true;
+					} else {
+						cbComp.selected = false;
+					}//else
+					try {
+						widthVal = Number(componentDef.@width);
+						if (widthVal>0) {
+							cbComp.width = widthVal;
+						}
+					} catch (err:*) {						
+					}
+					try {
+						heightVal = Number(componentDef.@height);
+						if (heightVal>0) {
+							cbComp.height = heightVal;
+						}
+					} catch (err:*) {						
+					}
+					try {
+						nameVal = String(componentDef.@instance);
+						cbComp.name = nameVal;						
+						this[nameVal] = cbComp;
 					} catch (err:*) {						
 					}
 					break;

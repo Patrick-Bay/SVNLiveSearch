@@ -66,6 +66,10 @@ package com.bit101.components
 			_tf.addEventListener(Event.SCROLL, onTextScroll);
 		}
 		
+		public function get scrollbar():VScrollBar {
+			return (_scrollbar);
+		}
+		
 		/**
 		 * Changes the thumb percent of the scrollbar based on how much text is shown in the text area.
 		 */
@@ -77,8 +81,7 @@ package com.bit101.components
 			_scrollbar.setThumbPercent(percent);
 			_scrollbar.pageSize = visibleLines;
 		}
-		
-		
+	
 		
 		
 		///////////////////////////////////
