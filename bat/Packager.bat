@@ -5,10 +5,16 @@ if not exist %CERT_FILE% goto certificate
 if not exist %AIR_PATH% md %AIR_PATH%
 set OUTPUT=%AIR_PATH%\%AIR_NAME%%AIR_TARGET%.air
 
+:: EXE output
+if "%STANDALONE%"=="true" md %AIR_PATH%\standalone
+
 :: Package
 echo.
-echo Packaging %AIR_NAME%%AIR_TARGET%.air using certificate %CERT_FILE%...
-call adt -package %OPTIONS% %SIGNING_OPTIONS% %OUTPUT% %APP_XML% %FILE_OR_DIR%
+echo Packaging %AIR_NAME%%AIR_TARGET%.air using certificate %CERT_FILE%
+if "%STANDALONE%"=="true" echo Creating standalone executable
+if not "%STANDALONE%"=="true" echo Creating AIR package
+if not "%STANDALONE%"=="true" call adt -package %OPTIONS% %SIGNING_OPTIONS% %OUTPUT% %APP_XML% %FILE_OR_DIR%
+if "%STANDALONE%"=="true" call adt -package %SIGNING_OPTIONS% -target bundle %AIR_PATH%/standalone/ %APP_XML% %FILE_OR_DIR%
 if errorlevel 1 goto failed
 goto end
 

@@ -13,6 +13,7 @@ package  {
 	import flash.desktop.NativeProcess;
 	import flash.desktop.NativeProcessStartupInfo;	
 	import flash.events.ProgressEvent;
+	import flash.events.NativeProcessExitEvent;
 	import com.bit101.components.*;
 	import com.bit101.charts.*;
 	import com.bit101.utils.*;
@@ -21,11 +22,11 @@ package  {
 		
 		public var config:XML =
 		<config>
-		    <launchcmd>
-		        @ECHO OFF
-				@CLS
-		        PATH %exepath%;
-				%exepath%\svn.exe ls -R %repoURL%
+		    <launchcmd>@ECHO OFF
+@CLS
+PATH %exepath%;
+CD %exepath%
+svn.exe ls -R %repoURL%
 			</launchcmd>
 			<views>
 				<main>
@@ -35,8 +36,8 @@ package  {
 					<InputText instance="fileName" x="90" y="30" width="550"></InputText>
 					<CheckBox instance="caseSensitiveToggle" x="90" y="50" width="550">Case Sensitive</CheckBox>
 					<PushButton instance="searchButton" x="90" y="70" width="550">SEARCH</PushButton>					
-					<TextArea instance="results" x="10" y="110" width="680" height="500">...Search Results...</TextArea>
-					<TextArea instance="searchProgressHistory" x="10" y="650" width="680" height="130">...Search Progress...</TextArea>					
+					<TextArea instance="results" x="10" y="110" width="680" height="500"></TextArea>
+					<TextArea instance="searchProgressHistory" x="10" y="650" width="680" height="130"></TextArea>					
 				</main>
 			</views>
 		</config>
@@ -44,7 +45,7 @@ package  {
 		private var _searchProc:NativeProcess;
 		private var _outputBuffer:String = null;
 		private var _searchProgressHistoryLength:uint = 0;
-		public var maxSearchProgressHistLength:uint = 10000;
+		public var maxSearchProgressHistLength:uint = 1000;
 		
 		public function Main():void {
 			this.addEventListener(Event.ADDED_TO_STAGE, this.setDefaults);
@@ -52,15 +53,42 @@ package  {
 		
 		private function onSearchProgress(eventObj:ProgressEvent):void {			
 			var newLine:String = _searchProc.standardOutput.readMultiByte(_searchProc.standardOutput.bytesAvailable, "iso-8895-1");
+			this.skipToEnd(this.searchProgressHistory);
 			this.analyzeSearchOutput(newLine);
 			
 		}
 		
-		private function scrollLoop(eventObj:Event):void {
+		private function stopSearch():void {
+			if (_searchProc != null) {
+				_searchProc.exit(true);
+				this.onSearchProcessExit(null);				
+			}
+		}
+		
+		private function onSearchProcessExit(eventObj:NativeProcessExitEvent):void {
+			_searchProc.removeEventListener(ProgressEvent.STANDARD_OUTPUT_DATA, this.onSearchProgress);
+			_searchProc.removeEventListener(NativeProcessExitEvent.EXIT, this.onSearchProcessExit);
+			_searchProc.closeInput();
+			_searchProc = null;
+			this.resetSearchButton();
+		}
+		
+		private function scrollLoop(eventObj:Event):void {	
+			var currentScrollPos:Number = this.searchProgressHistory.scrollbar.value;
+			var minScrollPos:Number = this.searchProgressHistory.scrollbar.minimum;
+			var maxScrollPos:Number = this.searchProgressHistory.scrollbar.maximum;
 			try {
-				this.searchProgressHistory.scrollbar.goDown();
 				this.searchProgressHistory.scrollbar.goDown();				
 			} catch (err:*) {			
+			}
+			try {
+				if (!_searchProc.running) {
+					if (currentScrollPos>=maxScrollPos) {
+						this.removeEventListener(Event.ENTER_FRAME, this.scrollLoop);
+					}//if
+				}
+			} catch (err:*) {
+				
 			}
 		}
 		
@@ -106,7 +134,30 @@ package  {
 			return (false);
 		}
 		
+		private function skipToEnd(taInstance:TextArea):void {
+			try {
+				taInstance.scrollbar.value = taInstance.scrollbar.maximum;
+			} catch (err:*) {				
+			}
+		}
+		
+		private function resetSearchButton():void {
+			this.searchButton.removeEventListener(MouseEvent.CLICK, this.onStopClick);
+			this.searchButton.addEventListener(MouseEvent.CLICK, this.onSearchClick);
+			this.searchButton.label = "SEARCH";
+		}
+		
+		private function onStopClick(eventObj:MouseEvent):void {
+			this.stopSearch();
+			this.resetSearchButton();
+			this.skipToEnd(this.searchProgressHistory);
+		}
+		
 		private function onSearchClick(eventObj:MouseEvent):void {
+			this.stopSearch();
+			this.searchButton.removeEventListener(MouseEvent.CLICK, this.onSearchClick);
+			this.searchButton.addEventListener(MouseEvent.CLICK, this.onStopClick);
+			this.searchButton.label = "STOP SEARCH";
 			var launchCMDContents:String = String(this.config.launchcmd);			
 			launchCMDContents = launchCMDContents.split("%repoURL%").join(this.repoURL.text);			
 			var tmpDir:File = File.createTempDirectory();
@@ -120,15 +171,20 @@ package  {
 			fs.close();		
 			//Launch CMD file
 			var npInfo:NativeProcessStartupInfo = new NativeProcessStartupInfo();
-			npInfo.workingDirectory = File.applicationDirectory;
+			npInfo.workingDirectory = tmpDir;
 			npInfo.executable = cmdFile;				
 			_searchProc = new NativeProcess();
 			_searchProc.addEventListener(ProgressEvent.STANDARD_OUTPUT_DATA, this.onSearchProgress);
+			_searchProc.addEventListener(NativeProcessExitEvent.EXIT, this.onSearchProcessExit);
 			this.results.text = "";
-			this.searchProgressHistory.text = "";
+			this.searchProgressHistory.text = "Searching...";
 			this.addEventListener(Event.ENTER_FRAME, this.scrollLoop);
-			_searchProc.start(npInfo);
-			trace ("Started search...");
+			try {
+				_searchProc.start(npInfo);
+				
+			} catch (err:*) {
+				this.results.text = "NativeProcess threw an error: "+err;
+			}			
 		}
 		
 		public function get caseSensitiveSearch():Boolean {
@@ -147,10 +203,17 @@ package  {
 			for (var count:int = 0; count < viewItems.length(); count++) {
 				var currentViewItem:XML = viewItems[count] as XML;				
 				this.generateComponent(currentViewItem);
-			}
-			this.searchButton.addEventListener(MouseEvent.CLICK, this.onSearchClick);
+			}			
 			this.results.editable = false;
 			this.searchProgressHistory.editable = false;
+			if (!NativeProcess.isSupported) {
+				this.searchButton.enabled = false;
+				this.results.text = "SVNLiveSearch can't continue because NativeProcess is not supported.\n";
+				this.results.text += "This application must be compiled as a native Windows executable (not an .air file)";
+			} else {
+				this.searchButton.enabled = true;
+				this.searchButton.addEventListener(MouseEvent.CLICK, this.onSearchClick);
+			}
 		}
 		
 		private function generateComponent(componentDef:XML):void {			
