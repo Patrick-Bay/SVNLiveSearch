@@ -13,8 +13,7 @@ Remote SVN repository search tool.
 
 ### To build a standalone Windows executable ###
 
-1. Follow steps 1 to 3 above to install FlashDevelop, get the source code, and open the project file.
-	Install at least "Flex + Air SDK" and "Adobe AIR" in the *AS3* section of *AppMan* installer application.
+1. Follow steps 1 to 3 above to install FlashDevelop, get the source code, and open the project file. Install at least "Flex + Air SDK" and "Adobe AIR" in the *AS3* section of *AppMan* installer application.
 2. Run FlashDevelop.
 3. If not already available, open the Project Manager panel by selecting *View -> Project Manager* from the menu.
 4. In the "bat" folder in the Project Manager panel find *CreateCertificate.bat*, right-click on it, and select *Execute*.
