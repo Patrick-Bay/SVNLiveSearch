@@ -24,6 +24,7 @@ package com.dougmccune.subversion
 	import org.httpclient.Log;
 	import org.httpclient.events.HttpDataEvent;
 	import org.httpclient.events.HttpResponseEvent;
+	 import org.httpclient.events.HttpListener;
 
 	[Event(name="revisionsLoaded", type="com.dougmccune.subversion.events.SVNRevisionListEvent")]
 	[Event(name="latestRevisionNumberLoaded", type="com.dougmccune.subversion.events.SVNLatestRevisionNumberEvent")]
@@ -72,7 +73,7 @@ package com.dougmccune.subversion
 		 */
 		private var data:ByteArray;
 		
-		override public function request(uri:URI, request:HttpRequest, timeout:int=60000):void {
+		override public function request(uri:URI, request:HttpRequest, timeout:int = 60000, listener:HttpListener = null):void {
 			lastRequest = request;
 			lastURI = uri;
 			
