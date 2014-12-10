@@ -1,8 +1,4 @@
 /**
- * 
- * This is a monkey-patched version of TLSEngine that includes the patch detailed here:
- * http://code.google.com/p/as3crypto/issues/detail?id=5
- * 
  * TLSEngine
  * 
  * A TLS protocol implementation.
@@ -135,6 +131,7 @@ package com.hurlant.crypto.tls {
 				}
 			}
 		}
+		
 		
 		public function dataAvailable(e:* = null):void {
 			if (_state == STATE_CLOSED) return; // ignore
@@ -691,7 +688,7 @@ package com.hurlant.crypto.tls {
 					trace("TLS WARNING: No check made on the certificate's identity.");
 					_otherCertificate = firstCert;
 				} else {
-					if (firstCert.getCommonName()==_otherIdentity || wildcardEq(firstCert.getCommonName(),_otherIdentity)) {
+					if (firstCert.getCommonName()==_otherIdentity) {
 						_otherCertificate = firstCert;
 					} else {
 						throw new TLSError("Invalid common name: "+firstCert.getCommonName()+", expected "+_otherIdentity, TLSError.bad_certificate);
@@ -701,17 +698,7 @@ package com.hurlant.crypto.tls {
 				throw new TLSError("Cannot verify certificate", TLSError.bad_certificate);
 			}
 		}
-
-		private function wildcardEq(certHostName:String, serverHostName:String):Boolean {
-			if (certHostName.charAt(0)=="*"){
-				var certArray:Array = certHostName.split(".");
-				var serverArray:Array = serverHostName.split(".");
-				return certArray[certArray.length-1]==serverArray[serverArray.length-1] && certArray[certArray.length]==serverArray[serverArray.length];
-			}
-			
-			return false;
-		}
-
+		
 		private function parseAlert(p:ByteArray):void {
 			//throw new Error("Alert not implemented.");
 			// 7.2
